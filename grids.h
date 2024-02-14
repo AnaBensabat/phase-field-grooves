@@ -1,20 +1,7 @@
 using namespace std;
 using matrix = vector<vector<vector<double>>>; 
 
-inline double laplacian(matrix &grid, int i, int j, int k){
-  int dimX = grid.size();
-  int dimY = grid[0].size();
-  int dimZ = grid[0][0].size();
-
-  double lap = 0;
-  lap += grid[((i+1)%dimX+dimX)%dimX][j][k] + grid[((i-1)%dimX+dimX)%dimX][j][k] +
-         grid[i][((j+1)%dimY+dimY)%dimY][k] + grid[i][((j-1)%dimY+dimY)%dimY][k] +
-         grid[i][j][((k+1)%dimZ+dimZ)%dimZ] + grid[i][j][((k-1)%dimZ+dimZ)%dimZ]
-         - 6*grid[i][j][k];
-  
-  return lap;	  
-}
-
+// AUX
 inline double h_function(double x){
   return x*x*(3-2*x);
 }
@@ -37,16 +24,21 @@ inline double laplacian_h(matrix &grid, int i, int j, int k){
   return lap;	  
 }
 
+
+// CLASSES
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 class Cell{
 public:
   Cell(int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, double radius_nucleus);
   matrix grid;
   matrix grid_nucleus;
-  double epsilon; //diffusion coefficient
-  double alpha;   //volume coefficient
-  double eta; //adhesion coefficient
-  double gamma; //repulsion term
-  double kappa;
+  double epsilon; 
+  double alpha;     //volume conservation
+  double alpha_s;   //surface conservation
+  double eta;       //adhesion
+  double gamma;     //repulsion
+  double kappa;     //ration between bending rigidities
 };
 
 Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, double radius_nucleus) {
@@ -65,135 +57,14 @@ Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> 
   }
 }
 
-
-//-----------
-
-void make_random_fiber(matrix &grid, int dimX, int dimY, int dimZ, double mu_theta, double mu_phi){
-  
-  //random points  
-  random_device rd; //random number from uniform distribuition as a seed
-  mt19937 gen(rd()); //mersenne_twister_engine
-  uniform_real_distribution<> disx(0, dimX-1);
-  uniform_real_distribution<> disy(0, dimY-1);
-  uniform_real_distribution<> disz(0, dimZ-1);
-  vector<double> line_point = {disx(gen), disy(gen), disz(gen)};
-
-  //random theta
-  random_device rd2{};
-  mt19937 gen2{rd2()};
-  double sigma_theta=0.3;//acos(-1)/6;
-  normal_distribution d_theta{mu_theta, sigma_theta};
-  double theta = d_theta(gen2);
-
-  //random phi
-  random_device rd4{};
-  mt19937 gen4{rd4()};
-  double sigma_phi=0.6;//acos(-1)/6;
-  normal_distribution d_phi{mu_phi, sigma_phi};
-  double phi = d_phi(gen4);
-  
-  //random point
-  random_device rd3{};
-  mt19937 gen3{rd3()};
-  double mu_radius=3;
-  double sigma_radius=0.5;
-  normal_distribution d_radius{mu_radius, sigma_radius};
-  double radius = d_radius(gen3);
-    
-  //create
-  vector<double> versor = {sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)};
-  # pragma omp parallel for
-  for(int i=0;i<dimX;i++){
-    for(int j=0;j<dimY;j++){
-      for(int k=0;k<dimZ;k++){
-	vector<double> vec = {i-line_point[0], j-line_point[1], k-line_point[2]};
-	vector<double> vec2 = cross(vec, versor);
-	double dist = norm(vec2)/norm(versor);
-	if (dist<radius) grid[i][j][k]=1;
-      }
-    }
-  }
-}
-
-
-class Fiber{
-public:
-  Fiber(int dimX, int dimY, int dimZ, double mu_theta, double mu_phi, double rho, double epsilon, double alpha);
-  matrix grid;
-  double epsilon; //diffusion coefficient
-  double alpha;   //volume coefficient 
-  
-  void stabilize(double dt, double time, int Nframes, string s="stabilize") {
-
-    int t0 = 0;
-    int N = time/dt;
-    int dimX = grid.size();
-    int dimY = grid[0].size();
-    int dimZ = grid[0][0].size();
-
-    matrix grid_fiber2 = grid;
-    double eps = 1e-7;
-    double vtarget_fiber = vol(grid, eps);
-    double cur_vol_fiber = vtarget_fiber;
-    
-    string id = s+to_string(t0)+".vti";  
-    //saveGridToVTI("fiber_"+id,grid);
-    
-    for(int step=0;step<N;step++){
-      # pragma omp parallel for
-      for(int i=0;i<dimX;i++){
-	for(int j=0;j<dimY;j++){
-	  for(int k=0;k<dimZ;k++){
-
-	    grid_fiber2[i][j][k] = grid[i][j][k] + dt*(
-						       laplacian(grid,i,j,k) +
-						       grid[i][j][k]*(1-grid[i][j][k])*(grid[i][j][k]-0.5 + alpha*(vtarget_fiber-cur_vol_fiber))
-						       );        
-	  }
-	}
-      }
-    
-      id = "stabilize"+to_string(t0+step+1)+".vti";
-      if (step%(int)(N/Nframes)==0) {
-	//saveGridToVTI("fiber_"+id,grid);
-      }
-
-      swap(grid, grid_fiber2);
-    }
-  }
-
-  void clear(matrix &grid_cell){
-    double eps=1e-7;
-    # pragma omp parallel for
-    for(int i=0;i<grid_cell.size();i++){
-      for(int j=0;j<grid_cell[0].size();j++){
-	for(int k=0;k<grid_cell[0][0].size();k++){
-	  if (eps<grid[i][j][k] && eps<grid_cell[i][j][k]) grid[i][j][k]=0;
-	}
-      }
-    }
-  }
-};
-
-//constructor
-Fiber::Fiber (int dimX, int dimY, int dimZ, double mu_theta, double mu_phi, double rho, double epsilon, double alpha) {
-
-  grid = matrix(dimX, vector<vector<double>>(dimY, vector<double>(dimZ)));
-
-  double curRho=0;
-  while(curRho<rho){ //creates fibers until target density is met
-    make_random_fiber(grid, dimX, dimY, dimZ, mu_theta, mu_phi);
-    curRho=density(grid);
-  }
-}
-
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 class Groove{
 public:
   Groove(int dimX, int dimY, int dimZ, int depth, int spacing, int width, double epsilon, double alpha);
   matrix grid;
-  double epsilon; //diffusion coefficient
-  double alpha;   //volume coefficient 
+  double epsilon;
+  double alpha;  
   
   void stabilize(double dt, double time, int Nframes, string s="stabilize") {
 
@@ -204,7 +75,7 @@ public:
     int dimZ = grid[0][0].size();
 
     matrix grid_groove2 = grid;
-    double eps = 1e-7;
+    double eps = 1e-6;
     double vtarget_groove = vol(grid, eps);
     double cur_vol_groove = vtarget_groove;
     
@@ -232,7 +103,6 @@ public:
       swap(grid, grid_groove2);
     }
   }
-
 };
 
 //constructor
@@ -252,7 +122,6 @@ Groove::Groove (int dimX, int dimY, int dimZ, int depth, int spacing, int width,
 
   //construct grooves
   int i = width;
-
   if (depth!=0){
     while(i<dimX-width){
       if (i%(width+spacing)==0) i += width;
@@ -274,15 +143,12 @@ Groove::Groove (int dimX, int dimY, int dimZ, int depth, int spacing, int width,
 	}
       }
     }
-  }
-  
+  }  
 }
 
 
-//-----------
-
-
-void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc, double dt, int time, string dir="", int Nframes=100){
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc, double dt, int time, string dir="", bool stab = false, int Nframes=100){
   
   int t0 = 1;
   int N = time/dt;
@@ -293,29 +159,50 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
   matrix grid_cell2 = cell.grid;
   matrix grid_nucleus2 = cell.grid_nucleus;
 
+  matrix grid_cell_aux = cell.grid;
+  matrix grid_nucleus_aux = cell.grid_nucleus;
+
   double eps = 1e-3;
   double vtarget_cell = vol(cell.grid, eps);
-  //double vtarget_cell = vol_citoplasm(cell.grid, cell.grid_nucleus, eps);
-
   double cur_vol_cell = vtarget_cell;
   double vtarget_nucleus = vol(cell.grid_nucleus, eps);
   double cur_vol_nucleus = vtarget_nucleus;
+
+  double atarget_cell = area(cell.grid, cell.epsilon);
+  double cur_area_cell = atarget_cell;
+  double atarget_nucleus = area(cell.grid, cell.epsilon);
+  double cur_area_nucleus = atarget_nucleus;  
   
   string id = to_string(t0)+".vti";
   //saveGridToVTI(dir+"cell_"+id,cell.grid);
   //saveGridToVTI(dir+"environment_"+id,environment);
   //saveGridToVTI(dir+"nucleus_"+id,cell.grid_nucleus);
+
+  double Mk = 1;
     
   for(int step=0;step<N;step++){
 
     cur_vol_cell = vol(cell.grid, eps);
     cur_vol_nucleus = vol(cell.grid_nucleus, eps);
-    
+
+    cur_area_cell = area(cell.grid, cell.epsilon);
+    cur_area_nucleus = area(cell.grid, cell.epsilon);
+      
     // if (step%100) {
     //   cout<<"Step "<<step<<"/"<<N<<endl;
     //   cout<<"Volume cell "<<cur_vol_cell<<"/"<<vtarget_cell<<endl;
     //   cout<<"Volume nucleus "<<cur_vol_nucleus<<"/"<<vtarget_nucleus<<endl;
     // }
+
+    # pragma omp parallel for
+    for(int i=0;i<dimX;i++){
+      for(int j=0;j<dimY;j++){
+	for(int k=0;k<dimZ;k++){
+	  grid_cell_aux[i][j][k] = cell.grid[i][j][k]*(cell.grid[i][j][k]-1)*(2*cell.grid[i][j][k]-1)-cell.epsilon*cell.epsilon*laplacian(cell.grid,i,j,k);
+	  grid_nucleus_aux[i][j][k] = cell.grid_nucleus[i][j][k]*(cell.grid_nucleus[i][j][k]-1)*(2*cell.grid_nucleus[i][j][k]-1)-cell.epsilon*cell.epsilon*laplacian(cell.grid_nucleus,i,j,k);
+	}
+      }
+    } 
     
     # pragma omp parallel for
     for(int i=0;i<dimX;i++){
@@ -325,26 +212,38 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
 	  double h_environment = environment[i][j][k]*environment[i][j][k]*(3-2*environment[i][j][k]); //interaction cell-environment
 	  double h_cell = (1-cell.grid[i][j][k])*(1-cell.grid[i][j][k])*(3-2*(1-cell.grid[i][j][k])); //repulsion of the nucleus at the border
 	  double h_nucleus = cell.grid_nucleus[i][j][k]*cell.grid_nucleus[i][j][k]*(3-2*cell.grid_nucleus[i][j][k]);
-
+	  
 	  grid_cell2[i][j][k] = cell.grid[i][j][k] + dt*(
-							 -velocity*(cell.grid[i][j][((k+1)%dimZ+dimZ)%dimZ] - cell.grid[i][j][((k-1)%dimZ+dimZ)%dimZ])*0.5 + //advective term
-							 cell.epsilon*cell.epsilon*laplacian(cell.grid,i,j,k) + //surface 
-							 cell.grid[i][j][k]*(1-cell.grid[i][j][k])*(cell.grid[i][j][k]-0.5
-												    -6*cell.gamma*h_environment //repulsion environment
-												    +6*cell.gamma*h_nucleus //repulsion nucleus 
-												    +6*cell.eta*laplacian_h(environment,i,j,k) //adhesion
-												    +12*cell.alpha*(vtarget_cell-cur_vol_cell) //volume conservation
-												    )
-							 );
+							 -velocity*(cell.grid[i][j][((k+1)%dimZ+dimZ)%dimZ] - cell.grid[i][j][((k-1)%dimZ+dimZ)%dimZ])*0.5 - //advective term
+							 Mk*(
+							    2*(1+6*cell.grid[i][j][k]*(cell.grid[i][j][k]-1))*grid_cell_aux[i][j][k] -
+							    2*cell.epsilon*cell.epsilon*laplacian(grid_cell_aux, i, j, k) -
+							    6*cell.eta*cell.grid[i][j][k]*(1-cell.grid[i][j][k])*laplacian_h(environment,i,j,k) +
+							    6*cell.gamma*cell.grid[i][j][k]*(1-cell.grid[i][j][k])*(h_environment-h_nucleus)
+							     )
+        );
 	  
 	  grid_nucleus2[i][j][k] = cell.grid_nucleus[i][j][k] + dt*(
-								    -velocity_nuc*(cell.grid[i][j][((k+1)%dimZ+dimZ)%dimZ] - cell.grid[i][j][((k-1)%dimZ+dimZ)%dimZ])*0.5 + //advective term
-								    cell.kappa*cell.epsilon*cell.epsilon*laplacian(cell.grid_nucleus,i,j,k) + //surface
-								    cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*( cell.kappa*(cell.grid_nucleus[i][j][k]-0.5)
-																-6*cell.gamma*h_cell //repulsion from outside of cell
-																+12*cell.alpha*(vtarget_nucleus-cur_vol_nucleus) //volume conservation
-																)
-								    );
+							 -velocity_nuc*(cell.grid_nucleus[i][j][((k+1)%dimZ+dimZ)%dimZ] - cell.grid_nucleus[i][j][((k-1)%dimZ+dimZ)%dimZ])*0.5 - //advective term
+							 Mk*(
+							     2*cell.kappa*(1+6*cell.grid_nucleus[i][j][k]*(cell.grid_nucleus[i][j][k]-1)*grid_nucleus_aux[i][j][k] -
+									   2*cell.kappa*cell.epsilon*cell.epsilon*laplacian(grid_nucleus_aux, i, j, k)) +
+							     6*cell.gamma*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*h_cell
+							     )
+        ) ;
+	  
+	  
+	  if (!stab)
+	    {
+	    grid_cell2[i][j][k] += dt*(
+				       24*cell.alpha_s*cell.epsilon*(atarget_cell - cur_area_cell)*laplacian(cell.grid, i, j, k) -
+				       12*cell.alpha*cell.grid[i][j][k]*(1-cell.grid[i][j][k])*(vtarget_cell-cur_vol_cell)
+				       );
+	    grid_nucleus2[i][j][k] += dt*(
+					  24*cell.alpha_s*cell.epsilon*(atarget_nucleus - cur_area_nucleus)*laplacian(cell.grid_nucleus, i, j, k) -
+					  12*cell.alpha*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*(vtarget_nucleus-cur_vol_nucleus)
+					  );
+	    }
 	}
       }
     }

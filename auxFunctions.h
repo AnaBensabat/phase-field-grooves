@@ -1,6 +1,29 @@
 using namespace std;
 using matrix = vector<vector<vector<double>>>; 
 
+// MATH
+inline double laplacian(matrix &grid, int i, int j, int k){
+  int dimX = grid.size();
+  int dimY = grid[0].size();
+  int dimZ = grid[0][0].size();
+
+  double lap = 0;
+  lap += grid[((i+1)%dimX+dimX)%dimX][j][k] + grid[((i-1)%dimX+dimX)%dimX][j][k] +
+         grid[i][((j+1)%dimY+dimY)%dimY][k] + grid[i][((j-1)%dimY+dimY)%dimY][k] +
+         grid[i][j][((k+1)%dimZ+dimZ)%dimZ] + grid[i][j][((k-1)%dimZ+dimZ)%dimZ]
+         - 6*grid[i][j][k];
+  
+  return lap;	  
+}
+
+double norm(vector<double> &vec){
+  return sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
+}
+
+vector<double> cross(vector<double> &u, vector<double> &v){
+  return {u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-v[0]*u[1]};
+}
+
 // PHYSICAL 
 double density(matrix &fiber_grid){
   double rho=0;
@@ -12,24 +35,6 @@ double density(matrix &fiber_grid){
     }
   }
   return rho/(fiber_grid.size()*fiber_grid[0].size()*fiber_grid[0][0].size());
-}
-
-double vol_citoplasm(matrix &cell_grid, matrix &nucleus_grid, float eps){
-  
-  double volume=0;
-  int dimx = cell_grid.size();
-  int dimy = cell_grid[0].size();
-  int dimz = cell_grid[0][0].size();
-  for(int i=0;i<dimx;i++){
-    for(int j=0;j<dimy;j++){
-      for(int k=0;k<dimz;k++){
-	double dif = cell_grid[i][j][k]-nucleus_grid[i][j][k];
-	double h = dif*dif*(3-2*dif);
-	volume += (h > eps) ? h : 0;
-      }
-    }
-  }
-  return volume;
 }
 
 double vol_in_grooves(matrix &grid, int height, float eps){
@@ -58,11 +63,32 @@ double vol(matrix &grid, float eps){
     for(int j=0;j<dimy;j++){
       for(int k=0;k<dimz;k++){
 	double h_phi =  grid[i][j][k]*grid[i][j][k]*(3-2*grid[i][j][k]);
-	volume += (h_phi > eps)?h_phi:0;
+	volume += (h_phi > eps) ? h_phi : 0;
       }
     }
   }
   return volume;
+}
+
+double area(matrix &grid, float epsilon){
+  
+  int dimX = grid.size();
+  int dimY = grid[0].size();
+  int dimZ = grid[0][0].size();
+
+  double A = 0;
+  for(int i=0;i<dimX;i++){
+    for(int j=0;j<dimY;j++){
+      for(int k=0;k<dimZ;k++){
+        double dx = (grid[((i+1)%dimX+dimX)%dimX][j][k] - grid[((i-1)%dimX+dimX)%dimX][j][k])*0.5;
+        double dy = (grid[i][((j+1)%dimY+dimY)%dimY][k] - grid[i][((j-1)%dimY+dimY)%dimY][k])*0.5;
+        double dz = (grid[i][j][((k+1)%dimZ+dimZ)%dimZ] - grid[i][j][((k-1)%dimZ+dimZ)%dimZ])*0.5;
+	A += dx*dx + dy*dy + dz*dz;
+      }
+    }
+  }
+  
+  return 6*epsilon*A;
 }
 
 vector<double> CM(matrix &cell_grid){
@@ -99,7 +125,6 @@ double lowest(matrix &grid, int depth){
 
 
 vector<double> DFS(matrix &original_grid, int height, double eps){
-
   matrix grid = original_grid;
   int dimX = grid.size();
   int dimY = grid[0].size();
@@ -176,14 +201,6 @@ bool isSplit(matrix &original_grid, double eps){
   else return true;
 }
 
-// MATH
-double norm(vector<double> &vec){
-  return sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
-}
-
-vector<double> cross(vector<double> &u, vector<double> &v){
-  return {u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-v[0]*u[1]};
-}
 
 
 // MISC
