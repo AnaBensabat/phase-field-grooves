@@ -24,13 +24,12 @@ inline double laplacian_h(matrix &grid, int i, int j, int k){
   return lap;	  
 }
 
-
 // CLASSES
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 class Cell{
 public:
-  Cell(int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, double radius_nucleus);
+  Cell(int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, vector<double> radius_nucleus, bool tan = false);
   matrix grid;
   matrix grid_nucleus;
   double epsilon; 
@@ -41,17 +40,41 @@ public:
   double kappa;     //ration between bending rigidities
 };
 
-Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, double radius_nucleus) {
-  grid = matrix(dimX, vector<vector<double>>(dimY, vector<double>(dimZ)));
-  grid_nucleus = matrix(dimX, vector<vector<double>>(dimY, vector<double>(dimZ)));
-  # pragma omp parallel for
-  for(int i=0;i<dimX;i++){
-    for(int j=0;j<dimY;j++){
-      for(int k=0;k<dimZ;k++){
-	if (((i-center[0])*(i-center[0])/(radius[0]*radius[0]) + (j-center[1])*(j-center[1])/(radius[0]*radius[0]) + (k-center[2])*(k-center[2])/(radius[1]*radius[1]) )<1)
-	  grid[i][j][k]=1;
-	if (((i-center_nucleus[0])*(i-center_nucleus[0]) + (j-center_nucleus[1])*(j-center_nucleus[1]) + (k-center_nucleus[2])*(k-center_nucleus[2]) )<radius_nucleus*radius_nucleus)
-	  grid_nucleus[i][j][k]=1;
+Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, vector<double> radius_nucleus, bool tan) {
+  grid = matrix(dimX, vector<vector<double>>(dimY, vector<double>(dimZ,0)));
+  grid_nucleus = matrix(dimX, vector<vector<double>>(dimY, vector<double>(dimZ,0)));
+
+  if (tan){
+    for(int i=0;i<dimX;i++){
+      for(int j=0;j<dimY;j++){
+	for(int k=0;k<dimZ;k++){
+	  double dist = sqrt(
+			     (i-center[0])*(i-center[0]) +
+			     (j-center[1])*(j-center[1]) +
+			     (k-center[2])*(k-center[2])
+			     );
+	  double theta = atan((k-center[2])/sqrt((i-center[0])*(i-center[0])+(j-center[1])*(j-center[1])));
+	  double R =  sqrt(1/
+			   (sin(theta)*sin(theta)/(radius[1]*radius[1]) + cos(theta)*cos(theta)/(radius[0]*radius[0]))
+			   );
+	  grid[i][j][k] = (tanh(( dist-R )
+				/epsilon
+				)+1)/2;
+
+	}
+      }
+    }
+  }
+  else{
+    # pragma omp parallel for
+    for(int i=0;i<dimX;i++){
+      for(int j=0;j<dimY;j++){
+	for(int k=0;k<dimZ;k++){
+	  if (((i-center[0])*(i-center[0])/(radius[0]*radius[0]) + (j-center[1])*(j-center[1])/(radius[0]*radius[0]) + (k-center[2])*(k-center[2])/(radius[1]*radius[1]) )<1)
+	    grid[i][j][k]=1;
+	  if (((i-center_nucleus[0])*(i-center_nucleus[0])/(radius_nucleus[0]*radius_nucleus[0]) + (j-center_nucleus[1])*(j-center_nucleus[1])/(radius_nucleus[0]*radius_nucleus[0]) + (k-center_nucleus[2])*(k-center_nucleus[2])/(radius_nucleus[1]*radius_nucleus[1]) )<1)
+	    grid_nucleus[i][j][k]=1;
+	}
       }
     }
   }
@@ -179,14 +202,21 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
   //saveGridToVTI(dir+"nucleus_"+id,cell.grid_nucleus);
 
   double Mk = 1;
-    
+
+  ofstream volume_vs_time;
+  ofstream area_vs_time;
+  volume_vs_time.open("volume_vs_time.txt");
+  area_vs_time.open("area_vs_time.txt");
   for(int step=0;step<N;step++){
 
     cur_vol_cell = vol(cell.grid, eps);
-    cur_vol_nucleus = vol(cell.grid_nucleus, eps);
+    //cur_vol_nucleus = vol(cell.grid_nucleus, eps);
 
     cur_area_cell = area(cell.grid, cell.epsilon);
-    cur_area_nucleus = area(cell.grid, cell.epsilon);
+    //cur_area_nucleus = area(cell.grid, cell.epsilon);
+
+    volume_vs_time << step << '\t' << cur_vol_cell << '\n';
+    area_vs_time << step << '\t' << cur_area_cell << '\n';
       
     // if (step%100) {
     //   cout<<"Step "<<step<<"/"<<N<<endl;
@@ -222,7 +252,7 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
 							    6*cell.gamma*cell.grid[i][j][k]*(1-cell.grid[i][j][k])*(h_environment-h_nucleus)
 							     )
         );
-	  
+	  /*
 	  grid_nucleus2[i][j][k] = cell.grid_nucleus[i][j][k] + dt*(
 							 -velocity_nuc*(cell.grid_nucleus[i][j][((k+1)%dimZ+dimZ)%dimZ] - cell.grid_nucleus[i][j][((k-1)%dimZ+dimZ)%dimZ])*0.5 - //advective term
 							 Mk*(
@@ -231,18 +261,20 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
 							     6*cell.gamma*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*h_cell
 							     )
         ) ;
-	  
+	  */
 	  
 	  if (!stab)
 	    {
-	    grid_cell2[i][j][k] += dt*(
+	    grid_cell2[i][j][k] -= Mk*dt*(
 				       24*cell.alpha_s*cell.epsilon*(atarget_cell - cur_area_cell)*laplacian(cell.grid, i, j, k) -
 				       12*cell.alpha*cell.grid[i][j][k]*(1-cell.grid[i][j][k])*(vtarget_cell-cur_vol_cell)
 				       );
-	    grid_nucleus2[i][j][k] += dt*(
+	    /*
+	    grid_nucleus2[i][j][k] -= Mk*dt*(
 					  24*cell.alpha_s*cell.epsilon*(atarget_nucleus - cur_area_nucleus)*laplacian(cell.grid_nucleus, i, j, k) -
 					  12*cell.alpha*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*(vtarget_nucleus-cur_vol_nucleus)
 					  );
+	    */
 	    }
 	}
       }
@@ -250,14 +282,17 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
   
     id = to_string(t0+step+1)+".vti";
     if (step%Nframes==0) {
-      cout<<"On step "<<step<<"/"<<N<<endl;
-      //saveGridToVTI(dir+"cell_"+id,cell.grid);
+      printf("\r[%3d%%]",step/Nframes*100);
+      saveGridToVTI(dir+"cell_"+id,cell.grid);
       //saveGridToVTI(dir+"environment_"+id,environment);
       //saveGridToVTI(dir+"nucleus_"+id,cell.grid_nucleus);
     }
     swap(cell.grid, grid_cell2);
     swap(cell.grid_nucleus, grid_nucleus2);
   }
+  cout<<endl;
+  volume_vs_time.close();
+  area_vs_time.close();
   t0 +=N;
 }
 
