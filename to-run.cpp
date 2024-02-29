@@ -18,8 +18,8 @@ void run_simulation(double kappa, double eta, string pwd){
   
   //MAKE GROOVES
   //geometry parameters
-  int depth = 0; //to test make it plane!
-  int spacing = 0;//10*scale;
+  int depth = 0;   //to test make it plane!
+  int spacing = 0; //10*scale;
   int width = 2*10*scale;
 
   //dynamic parameters
@@ -30,7 +30,7 @@ void run_simulation(double kappa, double eta, string pwd){
   Groove mygrooves(dimX, dimY, dimZ, depth, spacing, width, epsilon, alpha);
   cout<<"----GROOVES DONE----"<<endl;  
   double dt = 0.0001;
-  double time = 5;
+  double time = 1;
   cout<<"----GROOVE STABILIZATION----"<<endl;
   mygrooves.stabilize(dt, time, 5);
   saveGridToVTI(pwd+"environment_0.vti",mygrooves.grid);
@@ -39,25 +39,24 @@ void run_simulation(double kappa, double eta, string pwd){
   //MAKE CELL
   //geometry parameters
   vector<double> radius = {20*scale,10*scale}; //for the right scale radius = {15,15}  radius_nucleus = {9}
-  vector<double> radius_nucleus = {0*scale,0*scale};
+  vector<double> radius_nucleus = {0,0};//{10*scale,6*scale};
   depth = width;
-  vector<double> center_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]*2};
-  vector<double> nucleus_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]*2};
+  vector<double> center_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]+2*10*scale};
+  vector<double> nucleus_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]+2*10*scale};
   
   cout<<"----CREATING CELL----"<<endl;  
   Cell mycell (dimX, dimY, dimZ, center_coordinates, radius, nucleus_coordinates, radius_nucleus, true);
   saveGridToVTI(pwd+"cell_0.vti",mycell.grid);
   saveGridToVTI(pwd+"nucleus_0.vti",mycell.grid_nucleus);
-  cout<<"----CELL DONE----"<<endl;  
-
+  cout<<"----CELL DONE----"<<endl;
   
   //evolve cell
   mycell.epsilon = 0.5;         //surf->membrane thickness coefficient
   mycell.alpha = 0.001/12;      //volume coefficient
   mycell.alpha_s = 0.001;       //surface area coefficient
   mycell.gamma = 1;             //repulsion term
-  mycell.eta = 2;         //adhesion coefficient 
-  mycell.kappa = kappa;         //bending rigidity fraction
+  mycell.eta = 1;               //adhesion coefficient 
+  mycell.kappa = 1;             //bending rigidity fraction
   double velocity = 0.;         //drag velocity
   double velocity_nuc = 0;
 
@@ -68,8 +67,9 @@ void run_simulation(double kappa, double eta, string pwd){
   saveGridToVTI(pwd+s2,mycell.grid_nucleus);
   saveGridToVTI(pwd+s3,mygrooves.grid);
 
+  
   cout<<"----CELL STABILIZATION----"<<endl;  
-  time = 3;
+  time = 1;
   evolve(mycell, mygrooves.grid, 0, 0, dt, time, pwd, true);
   cout<<"----CELL STABILIZATION----"<<endl;
 
@@ -80,6 +80,8 @@ void run_simulation(double kappa, double eta, string pwd){
   saveGridToVTI(pwd+s2,mycell.grid_nucleus);
   saveGridToVTI(pwd+s3,mygrooves.grid);
 
+  mycell.grid = loadGridFromVTI("cell_0.vti");
+  
   double v0_cell = vol(mycell.grid,1e-6);
   double v0_nucleus = vol(mycell.grid_nucleus,1e-6);
 
@@ -92,8 +94,9 @@ void run_simulation(double kappa, double eta, string pwd){
   cout<<"Initial Nucleus Surface Area: "<<s0_nucleus<<'\n';
   
   cout<<"----STARTING TIME EVOLUTION----"<<endl;
-  time = 1;
-  evolve(mycell, mygrooves.grid, velocity, velocity_nuc,  dt, time, pwd, 100000000);
+  time = 20;
+  evolve(mycell, mygrooves.grid, velocity, velocity_nuc,  dt, time, pwd, false, 500);
+  cout<<endl;
   cout<<"----TIME EVOLUTION DONE----"<<endl;
   
   s1 = "cell_F_eta="+to_string(eta)+"_k="+to_string(kappa)+".vti";
