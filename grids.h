@@ -215,8 +215,6 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
     l1+=".txt";
     l2+=".txt";
   }
-  cout<<l1<<endl;
-  cout<<l2<<endl;
   volume_vs_time.open(l1);
   area_vs_time.open(l2);
   for(int step=0;step<N;step++){

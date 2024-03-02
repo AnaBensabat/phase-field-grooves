@@ -20,7 +20,7 @@ void run_simulation(double kappa, double eta, string pwd){
   //geometry parameters
   int depth = 0;   //to test make it plane!
   int spacing = 0; //10*scale;
-  int width = 2*10*scale;
+  int width = 0; //2*10*scale;
 
   //dynamic parameters
   double alpha = 0.001;
@@ -41,8 +41,8 @@ void run_simulation(double kappa, double eta, string pwd){
   vector<double> radius = {20*scale,10*scale}; //for the right scale radius = {15,15}  radius_nucleus = {9}
   vector<double> radius_nucleus = {0,0};//{10*scale,6*scale};
   depth = width;
-  vector<double> center_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]+2*10*scale};
-  vector<double> nucleus_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]+2*10*scale};
+  vector<double> center_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]};
+  vector<double> nucleus_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]};
   
   cout<<"----CREATING CELL----"<<endl;  
   Cell mycell (dimX, dimY, dimZ, center_coordinates, radius, nucleus_coordinates, radius_nucleus, true);
@@ -52,8 +52,8 @@ void run_simulation(double kappa, double eta, string pwd){
   
   //evolve cell
   mycell.epsilon = 0.5;         //surf->membrane thickness coefficient
-  mycell.alpha = 0.001/12;      //volume coefficient
-  mycell.alpha_s = 0.001;       //surface area coefficient
+  mycell.alpha = 0.005/12;      //volume coefficient
+  mycell.alpha_s = 0.002;       //surface area coefficient
   mycell.gamma = 1;             //repulsion term
   mycell.eta = 1;               //adhesion coefficient 
   mycell.kappa = 1;             //bending rigidity fraction
@@ -69,8 +69,8 @@ void run_simulation(double kappa, double eta, string pwd){
 
   
   cout<<"----CELL STABILIZATION----"<<endl;  
-  time = 1;
-  evolve(mycell, mygrooves.grid, 0, 0, dt, time, pwd, true);
+  //time = 1;
+  //evolve(mycell, mygrooves.grid, 0, 0, dt, time, pwd, true);
   cout<<"----CELL STABILIZATION----"<<endl;
 
   s1 = "cell_01_eta="+to_string(eta)+"_k="+to_string(kappa)+".vti";
@@ -94,9 +94,8 @@ void run_simulation(double kappa, double eta, string pwd){
   cout<<"Initial Nucleus Surface Area: "<<s0_nucleus<<'\n';
   
   cout<<"----STARTING TIME EVOLUTION----"<<endl;
-  time = 20;
+  time = 10;
   evolve(mycell, mygrooves.grid, velocity, velocity_nuc,  dt, time, pwd, false, 500);
-  cout<<endl;
   cout<<"----TIME EVOLUTION DONE----"<<endl;
   
   s1 = "cell_F_eta="+to_string(eta)+"_k="+to_string(kappa)+".vti";
