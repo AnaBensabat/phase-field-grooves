@@ -34,6 +34,7 @@ public:
   matrix grid_nucleus;
   double epsilon; 
   double alpha;     //volume conservation
+  double alpha_nuc; 
   double alpha_s;   //surface conservation
   double eta;       //adhesion
   double gamma;     //repulsion
@@ -48,6 +49,7 @@ Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> 
     for(int i=0;i<dimX;i++){
       for(int j=0;j<dimY;j++){
 	for(int k=0;k<dimZ;k++){
+	  
 	  double dist = sqrt(
 			     (i-center[0])*(i-center[0]) +
 			     (j-center[1])*(j-center[1]) +
@@ -58,6 +60,22 @@ Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> 
 			   (sin(theta)*sin(theta)/(radius[1]*radius[1]) + cos(theta)*cos(theta)/(radius[0]*radius[0]))
 			   );
 	  grid[i][j][k] = (-tanh(( dist-R )
+				/epsilon
+				)+1)/2;
+
+	  
+	  //nucleus
+	  
+	  double dist_n = sqrt(
+			     (i-center_nucleus[0])*(i-center_nucleus[0]) +
+			     (j-center_nucleus[1])*(j-center_nucleus[1]) +
+			     (k-center_nucleus[2])*(k-center_nucleus[2])
+			     );
+	  double theta_n = atan((k-center_nucleus[2])/sqrt((i-center_nucleus[0])*(i-center_nucleus[0])+(j-center_nucleus[1])*(j-center_nucleus[1])));
+	  double R_n =  sqrt(1/
+			   (sin(theta)*sin(theta)/(radius_nucleus[1]*radius_nucleus[1]) + cos(theta)*cos(theta)/(radius_nucleus[0]*radius_nucleus[0]))
+			   );
+	  grid_nucleus[i][j][k] = (-tanh(( dist_n-R_n )
 				/epsilon
 				)+1)/2;
 
@@ -193,7 +211,7 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
 
   double atarget_cell = area(cell.grid, cell.epsilon);
   double cur_area_cell = atarget_cell;
-  double atarget_nucleus = area(cell.grid, cell.epsilon);
+  double atarget_nucleus = area(cell.grid_nucleus, cell.epsilon);
   double cur_area_nucleus = atarget_nucleus;  
   
   string id = to_string(t0)+".vti";
@@ -207,34 +225,47 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
   ofstream area_vs_time;
   string l1 = "volume_vs_time";
   string l2 = "area_vs_time";
+
+  ofstream volume_nucleus_vs_time;
+  ofstream area_nucleus_vs_time;
+  string l3 = "volume_nucleus_vs_time";
+  string l4 = "area_nucleus_vs_time";
   if (stab){
     l1+="_stab.txt";
     l2+="_stab.txt";
+    l3+="_stab.txt";
+    l4+="_stab.txt";
   }
   else{
     l1+=".txt";
     l2+=".txt";
+    l3+=".txt";
+    l4+=".txt";
   }
   volume_vs_time.open(l1);
   area_vs_time.open(l2);
-  for(int step=0;step<N;step++){
-    
-
+  volume_nucleus_vs_time.open(l3);
+  area_nucleus_vs_time.open(l4);
+  
+  for(int step=0;step<N;step++){  
     
     cur_vol_cell = vol(cell.grid, eps);
-    //cur_vol_nucleus = vol(cell.grid_nucleus, eps);
+    cur_vol_nucleus = vol(cell.grid_nucleus, eps);
 
     cur_area_cell = area(cell.grid, cell.epsilon);
-    //cur_area_nucleus = area(cell.grid, cell.epsilon);
+    cur_area_nucleus = area(cell.grid_nucleus, cell.epsilon);
 
     volume_vs_time << cur_vol_cell << endl;
     area_vs_time << cur_area_cell << endl;
+    
+    volume_nucleus_vs_time << cur_vol_nucleus << endl;
+    area_nucleus_vs_time << cur_area_nucleus << endl;
       
-    //if (step%100) {
-    //   cout<<"Step "<<step<<"/"<<N<<endl;
-    //   cout<<"Volume cell "<<cur_vol_cell<<"/"<<vtarget_cell<<endl;
-    //   cout<<"Volume nucleus "<<cur_vol_nucleus<<"/"<<vtarget_nucleus<<endl;
-    // }
+    if (step%500) {
+       cout<<"Step "<<step<<"/"<<N<<endl;
+       cout<<"Volume cell "<<cur_vol_cell<<"/"<<vtarget_cell<<" with error "<<abs(vtarget_cell-cur_vol_cell)/vtarget_cell<<endl;
+       cout<<"Volume nucleus "<<cur_vol_nucleus<<"/"<<vtarget_nucleus<<" with error of "<<abs(vtarget_nucleus-cur_vol_nucleus)/vtarget_nucleus<<endl;
+    }
 
     # pragma omp parallel for
     for(int i=0;i<dimX;i++){
@@ -264,16 +295,15 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
 							    6*cell.gamma*cell.grid[i][j][k]*(1-cell.grid[i][j][k])*(h_environment-h_nucleus)
 							     )
         );
-	  /*
+	  
 	  grid_nucleus2[i][j][k] = cell.grid_nucleus[i][j][k] + dt*(
 							 -velocity_nuc*(cell.grid_nucleus[i][j][((k+1)%dimZ+dimZ)%dimZ] - cell.grid_nucleus[i][j][((k-1)%dimZ+dimZ)%dimZ])*0.5 - //advective term
 							 Mk*(
-							     2*cell.kappa*(1+6*cell.grid_nucleus[i][j][k]*(cell.grid_nucleus[i][j][k]-1)*grid_nucleus_aux[i][j][k] -
-									   2*cell.kappa*cell.epsilon*cell.epsilon*laplacian(grid_nucleus_aux, i, j, k)) +
-							     6*cell.gamma*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*h_cell
+							     2*cell.kappa*(1+6*cell.grid_nucleus[i][j][k]*(cell.grid_nucleus[i][j][k]-1))*grid_nucleus_aux[i][j][k] -
+									   2*cell.kappa*cell.epsilon*cell.epsilon*laplacian(grid_nucleus_aux, i, j, k)
+							     + 6*cell.gamma*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*h_cell
 							     )
-        ) ;
-	  */
+        );
 	  
 	  if (!stab)
 	    {
@@ -281,12 +311,11 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
 				       24*cell.alpha_s*cell.epsilon*(atarget_cell - cur_area_cell)*laplacian(cell.grid, i, j, k) -
 				       12*cell.alpha*cell.grid[i][j][k]*(1-cell.grid[i][j][k])*(vtarget_cell-cur_vol_cell)
 				       );
-	    /*
+	    
 	    grid_nucleus2[i][j][k] -= Mk*dt*(
 					  24*cell.alpha_s*cell.epsilon*(atarget_nucleus - cur_area_nucleus)*laplacian(cell.grid_nucleus, i, j, k) -
-					  12*cell.alpha*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*(vtarget_nucleus-cur_vol_nucleus)
+					  12*cell.alpha_nuc*cell.grid_nucleus[i][j][k]*(1-cell.grid_nucleus[i][j][k])*(vtarget_nucleus-cur_vol_nucleus)
 					  );
-	    */
 	    }
 	}
       }
@@ -297,13 +326,15 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
     if (step%Nframes==0) {
       saveGridToVTI(dir+"cell_"+id,cell.grid);
       //saveGridToVTI(dir+"environment_"+id,environment);
-      //saveGridToVTI(dir+"nucleus_"+id,cell.grid_nucleus);
+      saveGridToVTI(dir+"nucleus_"+id,cell.grid_nucleus);
     }
     swap(cell.grid, grid_cell2);
     swap(cell.grid_nucleus, grid_nucleus2);
   }
   volume_vs_time.close();
   area_vs_time.close();
+  volume_nucleus_vs_time.close();
+  area_nucleus_vs_time.close();
   t0 +=N;
 }
 
