@@ -189,7 +189,7 @@ Groove::Groove (int dimX, int dimY, int dimZ, int depth, int spacing, int width,
 
 
 //----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc, double dt, double time, string dir="", bool stab = false, int Nframes=100){
+void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc, double dt, double time, string dir="", bool stab = false, bool control_vol = false, int Nframes=100){
   
   int t0 = 1;
   int N = time/dt;
@@ -206,6 +206,7 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
   double eps = 1e-3;
   double vtarget_cell = vol(cell.grid, eps);
   double cur_vol_cell = vtarget_cell;
+  double o_vtarget_cell = vtarget_cell;
   double vtarget_nucleus = vol(cell.grid_nucleus, eps);
   double cur_vol_nucleus = vtarget_nucleus;
 
@@ -250,6 +251,8 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
   for(int step=0;step<N;step++){  
     
     cur_vol_cell = vol(cell.grid, eps);
+    // squeeze cell
+    if (control_vol && step%100==0) vtarget_cell = o_vtarget_cell/(1+double(step)/double(N));
     cur_vol_nucleus = vol(cell.grid_nucleus, eps);
 
     cur_area_cell = area(cell.grid, cell.epsilon);
@@ -261,7 +264,7 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
     volume_nucleus_vs_time << cur_vol_nucleus << endl;
     area_nucleus_vs_time << cur_area_nucleus << endl;
       
-    if (step%500) {
+    if (step%100==0) {
        cout<<"Step "<<step<<"/"<<N<<endl;
        cout<<"Volume cell "<<cur_vol_cell<<"/"<<vtarget_cell<<" with error "<<abs(vtarget_cell-cur_vol_cell)/vtarget_cell<<endl;
        cout<<"Volume nucleus "<<cur_vol_nucleus<<"/"<<vtarget_nucleus<<" with error of "<<abs(vtarget_nucleus-cur_vol_nucleus)/vtarget_nucleus<<endl;

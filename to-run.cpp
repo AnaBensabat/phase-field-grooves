@@ -2,6 +2,7 @@
 #include<random>
 #include<omp.h>
 #include"auxFunctions.h"
+// #include"grids-2.h"
 #include"grids.h"
 
 void run_simulation(double kappa, double eta, string pwd){
@@ -39,7 +40,7 @@ void run_simulation(double kappa, double eta, string pwd){
   //MAKE CELL
   //geometry parameters
   vector<double> radius = {20*scale,10*scale}; //for the right scale radius = {15,15}  radius_nucleus = {9}
-  vector<double> radius_nucleus = {6*scale,6*scale};
+  vector<double> radius_nucleus = {10*scale,7*scale};
   depth = width;
   vector<double> center_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]+2*10*scale};
   vector<double> nucleus_coordinates = {(double)dimX/2,(double)dimY/2,(double)depth+(double)radius[1]+2*10*scale};
@@ -81,7 +82,7 @@ void run_simulation(double kappa, double eta, string pwd){
   cout<<"Initial Nucleus Surface Area: "<<s0_nucleus<<'\n';
   
   cout<<"----CELL STABILIZATION----"<<endl;  
-  //time = 0.5;
+  time = 0.2;
   //evolve(mycell, mygrooves.grid, 0, 0, dt, time, pwd, true);
   cout<<"----CELL STABILIZATION----"<<endl;
 
@@ -107,10 +108,10 @@ void run_simulation(double kappa, double eta, string pwd){
   cout<<"Initial Nucleus Volume: "<<v0_nucleus<<'\n';
   cout<<"Initial Cell Surface Area: "<<s0_cell<<'\n';
   cout<<"Initial Nucleus Surface Area: "<<s0_nucleus<<'\n';
-  
+
   cout<<"----STARTING TIME EVOLUTION----"<<endl;
-  time = 1;
-  evolve(mycell, mygrooves.grid, velocity, velocity_nuc,  dt, time, pwd, false, 500);
+  time = 10;
+  evolve(mycell, mygrooves.grid, velocity, velocity_nuc,  dt, time, pwd, false, true, 1000);
   cout<<"----TIME EVOLUTION DONE----"<<endl;
   
   s1 = "cell_F_eta="+to_string(eta)+"_k="+to_string(kappa)+".vti";
