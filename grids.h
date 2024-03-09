@@ -29,7 +29,7 @@ inline double laplacian_h(matrix &grid, int i, int j, int k){
 
 class Cell{
 public:
-  Cell(int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, vector<double> radius_nucleus, bool tan = false);
+  Cell(int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, vector<double> radius_nucleus, bool tan = false, bool bomboca = false);
   matrix grid;
   matrix grid_nucleus;
   double epsilon; 
@@ -41,7 +41,7 @@ public:
   double kappa;     //ration between bending rigidities
 };
 
-Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, vector<double> radius_nucleus, bool tan) {
+Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> radius, vector<double> center_nucleus, vector<double> radius_nucleus, bool tan, bool bomboca) {
   grid = matrix(dimX, vector<vector<double>>(dimY, vector<double>(dimZ,0)));
   grid_nucleus = matrix(dimX, vector<vector<double>>(dimY, vector<double>(dimZ,0)));
 
@@ -64,8 +64,7 @@ Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> 
 				)+1)/2;
 
 	  
-	  //nucleus
-	  
+	  //nucleus	  
 	  double dist_n = sqrt(
 			     (i-center_nucleus[0])*(i-center_nucleus[0]) +
 			     (j-center_nucleus[1])*(j-center_nucleus[1]) +
@@ -75,13 +74,32 @@ Cell::Cell (int dimX, int dimY, int dimZ, vector<double> center, vector<double> 
 	  double R_n =  sqrt(1/
 			   (sin(theta)*sin(theta)/(radius_nucleus[1]*radius_nucleus[1]) + cos(theta)*cos(theta)/(radius_nucleus[0]*radius_nucleus[0]))
 			   );
-	  grid_nucleus[i][j][k] = (-tanh(( dist_n-R_n )
+	  grid_nucleus[i][j][k] = (radius_nucleus[0]==0)?0:(-tanh(( dist_n-R_n )
 				/epsilon
 				)+1)/2;
 
 	}
       }
     }
+
+    for(int i=center[0]-1;i<=center[0]+1;i++){
+      for(int j=center[1]-1;j<=center[1]+1;j++){
+	for(int k=center[2]-1;k<=center[2]+1;k++){
+	  grid[i][j][k] = 1;
+	}
+      }
+    }
+    
+    if (bomboca){
+      for(int i=0;i<dimX;i++){
+	for(int j=0;j<dimY;j++){
+	  for(int k=0;k<center[2];k++){
+	    grid[i][j][k] = 0;
+	  }
+	}
+      } 
+    }
+    
   }
   else{
     # pragma omp parallel for
@@ -325,7 +343,7 @@ void evolve(Cell &cell, matrix environment, double velocity, double velocity_nuc
     }
   
     id = to_string(t0+step+1)+".vti";
-    printf("\r[%3d%%]",double(step)/N*100);
+    //printf("\r[%3d%%]",double(step)/N*100);
     if (step%Nframes==0) {
       saveGridToVTI(dir+"cell_"+id,cell.grid);
       //saveGridToVTI(dir+"environment_"+id,environment);
